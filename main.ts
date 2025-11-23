@@ -1,22 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
-// မိတ်ဆွေ ပို့ပေးလိုက်သော Key အသစ်
+// မိတ်ဆွေရဲ့ API KEY (အသစ်)
 const API_KEY = "AIzaSyClhO1S_DyCvZMzfDj2R28ivYx8vVhiZYc"; 
-
-const SYSTEM_INSTRUCTION = `
-You are a helpful AI assistant for Myanmar 2D/3D enthusiasts.
-Instructions:
-1. If the user asks about a dream (အိပ်မက်), interpret it into 2D lucky numbers.
-2. If the user talks casually (Greeting, General Knowledge), reply like a normal friendly human.
-3. Always reply in Myanmar Language (Burmese).
-`;
-
-// စမ်းသပ်မည့် Model စာရင်း (တစ်ခုမရရင် နောက်တစ်ခု ပြောင်းသုံးမည်)
-const MODELS = [
-  "gemini-1.5-flash",
-  "gemini-1.5-pro",
-  "gemini-1.0-pro"
-];
 
 serve(async (req) => {
   const url = new URL(req.url);
@@ -24,44 +9,35 @@ serve(async (req) => {
   if (req.method === "POST" && url.pathname === "/chat") {
     try {
       const { message } = await req.json();
-      let reply = "စက်ပိုင်းဆိုင်ရာ အခက်အခဲဖြစ်နေပါသည် ခင်ဗျာ။";
-      let success = false;
+      
+      // အရိုးရှင်းဆုံး Payload ပုံစံ (Error နည်းအောင်)
+      const prompt = `
+      You are a helpful AI assistant for Myanmar 2D/3D. 
+      Reply in Myanmar Language.
+      
+      User: ${message}`;
 
-      // Model တစ်ခုချင်းစီ လိုက်စမ်းမည်
-      for (const model of MODELS) {
-        if(success) break;
-        
-        try {
-          console.log(`Trying model: ${model}...`);
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ 
-                role: "user",
-                parts: [{ text: SYSTEM_INSTRUCTION + "\nUser said: " + message }] 
-              }]
-            })
-          });
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        })
+      });
 
-          const data = await response.json();
-
-          // အဆင်ပြေရင် Loop ထဲကထွက်မည်
-          if (!data.error && data.candidates) {
-             reply = data.candidates[0].content.parts[0].text;
-             success = true;
-          } else {
-             console.log(`Model ${model} failed:`, data.error?.message);
-          }
-        } catch (err) {
-          console.log(`Connection failed for ${model}`);
-        }
+      const data = await response.json();
+      
+      // အကယ်၍ Google က Error ပြန်ပို့ရင် အဲ့ဒီ Error အတိုင်း ပြခိုင်းမယ် (Debug လုပ်ရန်)
+      if (data.error) {
+          return new Response(JSON.stringify({ reply: "GOOGLE ERROR: " + data.error.message }), { headers: { "Content-Type": "application/json" } });
       }
+
+      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "No response text found.";
       
       return new Response(JSON.stringify({ reply }), { headers: { "Content-Type": "application/json" } });
 
     } catch (e) {
-      return new Response(JSON.stringify({ reply: "အင်တာနက်လိုင်း အခက်အခဲရှိနေပါတယ်ခင်ဗျာ။" }), { headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ reply: "NETWORK ERROR: " + e.message }), { headers: { "Content-Type": "application/json" } });
     }
   }
 
@@ -71,38 +47,35 @@ serve(async (req) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-      <title>AI 2D ဆရာ</title>
+      <title>AI Debugger</title>
       <script src="https://cdn.tailwindcss.com"></script>
       <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
       <style>
         body { background: #0f172a; color: white; font-family: sans-serif; }
-        .chat-container { height: calc(100vh - 80px); overflow-y: auto; padding: 20px; scroll-behavior: smooth; }
-        .msg { max-width: 85%; margin-bottom: 15px; padding: 12px 16px; border-radius: 20px; font-size: 14px; line-height: 1.6; }
-        .user { background: #eab308; color: black; align-self: flex-end; margin-left: auto; border-bottom-right-radius: 4px; }
-        .ai { background: #1e293b; color: #e2e8f0; align-self: flex-start; margin-right: auto; border-bottom-left-radius: 4px; border: 1px solid #334155; }
-        .typing { font-size: 12px; color: #94a3b8; margin-left: 20px; display: none; }
+        .chat-container { height: calc(100vh - 80px); overflow-y: auto; padding: 20px; }
+        .msg { max-width: 85%; margin-bottom: 15px; padding: 12px 16px; border-radius: 20px; font-size: 14px; line-height: 1.6; word-wrap: break-word; }
+        .user { background: #eab308; color: black; align-self: flex-end; margin-left: auto; }
+        .ai { background: #1e293b; color: #e2e8f0; align-self: flex-start; margin-right: auto; border: 1px solid #334155; }
+        .error { background: #7f1d1d; color: #fecaca; border: 1px solid #ef4444; }
       </style>
     </head>
     <body class="flex flex-col h-screen">
-      <div class="bg-slate-900 p-4 flex items-center gap-3 shadow-lg border-b border-slate-800 z-10">
-        <div class="w-10 h-10 rounded-full bg-yellow-500 flex items-center justify-center text-black font-bold"><i class="fas fa-robot"></i></div>
-        <div><h1 class="font-bold text-lg text-white">AI 2D ဆရာ</h1><div class="text-[10px] text-green-400">● Online</div></div>
+      <div class="bg-slate-900 p-4 shadow-lg border-b border-slate-800 z-10 text-center">
+        <h1 class="font-bold text-lg text-white">AI System Check</h1>
       </div>
 
       <div id="chatBox" class="chat-container flex flex-col">
-        <div class="msg ai">မင်္ဂလာပါခင်ဗျာ။ အိပ်မက်မေးမလား၊ စကားပြောမလား ရပါတယ်ဗျ။</div>
+        <div class="msg ai">စမ်းသပ်ရန် "hello" ဟု ရိုက်ထည့်ပါ။ Error တက်ရင် အင်္ဂလိပ်စာသား ပေါ်လာပါလိမ့်မယ်။</div>
       </div>
-      <div id="typing" class="typing">AI is thinking...</div>
 
       <div class="p-3 bg-slate-900 border-t border-slate-800 flex gap-2 items-center">
-        <input id="msgInput" type="text" placeholder="စာရိုက်ပါ..." class="flex-1 bg-slate-800 text-white rounded-full px-5 py-3 focus:outline-none border border-slate-700">
+        <input id="msgInput" type="text" placeholder="Type hello..." class="flex-1 bg-slate-800 text-white rounded-full px-5 py-3 focus:outline-none border border-slate-700">
         <button onclick="sendMsg()" class="bg-yellow-500 text-black w-12 h-12 rounded-full flex items-center justify-center shadow-lg"><i class="fas fa-paper-plane"></i></button>
       </div>
 
       <script>
         const chatBox = document.getElementById('chatBox');
         const input = document.getElementById('msgInput');
-        const typing = document.getElementById('typing');
         
         input.addEventListener("keypress", function(e) { if(e.key === "Enter") sendMsg(); });
 
@@ -112,7 +85,6 @@ serve(async (req) => {
             
             addBubble(text, 'user');
             input.value = '';
-            typing.style.display = 'block';
             chatBox.scrollTop = chatBox.scrollHeight;
 
             try {
@@ -122,13 +94,14 @@ serve(async (req) => {
                     body: JSON.stringify({ message: text })
                 });
                 const data = await res.json();
-                typing.style.display = 'none';
+                
+                let type = 'ai';
+                if(data.reply.includes('ERROR')) type = 'error';
                 
                 let cleanReply = data.reply.replace(/\\*\\*(.*?)\\*\\*/g, '<b>$1</b>').replace(/\\n/g, '<br>');
-                addBubble(cleanReply, 'ai');
+                addBubble(cleanReply, type);
             } catch(e) {
-                typing.style.display = 'none';
-                addBubble("Error: " + e.message, 'ai');
+                addBubble("FATAL ERROR: " + e.message, 'error');
             }
         }
 
