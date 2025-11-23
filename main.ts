@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
-// မိတ်ဆွေရဲ့ API KEY
-const API_KEY = "AIzaSyCfSGsAM-ypMKhmSZ0q8Kkex-Ye3jXY3kI"; 
+// မိတ်ဆွေ ပို့ပေးလိုက်သော Key အသစ်
+const API_KEY = "AIzaSyClhO1S_DyCvZMzfDj2R28ivYx8vVhiZYc"; 
 
 const SYSTEM_INSTRUCTION = `
 You are a helpful AI assistant for Myanmar 2D/3D enthusiasts.
@@ -11,40 +11,55 @@ Instructions:
 3. Always reply in Myanmar Language (Burmese).
 `;
 
+// စမ်းသပ်မည့် Model စာရင်း (တစ်ခုမရရင် နောက်တစ်ခု ပြောင်းသုံးမည်)
+const MODELS = [
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
+  "gemini-1.0-pro"
+];
+
 serve(async (req) => {
   const url = new URL(req.url);
 
   if (req.method === "POST" && url.pathname === "/chat") {
     try {
       const { message } = await req.json();
-      
-      // ပြင်ဆင်ချက်: gemini-pro (v1beta) ကို ပြန်သုံးထားပါတယ်
-      // ဒါက အကောင့်တိုင်းအတွက် အဆင်အပြေဆုံး Model ပါ
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            { 
-              parts: [{ text: SYSTEM_INSTRUCTION + "\nUser said: " + message }] 
-            }
-          ]
-        })
-      });
+      let reply = "စက်ပိုင်းဆိုင်ရာ အခက်အခဲဖြစ်နေပါသည် ခင်ဗျာ။";
+      let success = false;
 
-      const data = await response.json();
-      
-      // Error စစ်ဆေးခြင်း
-      if (data.error) {
-          console.log("API Error:", data.error);
-          // Error တက်ရင် အကြောင်းရင်းကို ပြန်ပြပါမယ်
-          return new Response(JSON.stringify({ reply: "System Error: " + data.error.message }), { headers: { "Content-Type": "application/json" } });
+      // Model တစ်ခုချင်းစီ လိုက်စမ်းမည်
+      for (const model of MODELS) {
+        if(success) break;
+        
+        try {
+          console.log(`Trying model: ${model}...`);
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ 
+                role: "user",
+                parts: [{ text: SYSTEM_INSTRUCTION + "\nUser said: " + message }] 
+              }]
+            })
+          });
+
+          const data = await response.json();
+
+          // အဆင်ပြေရင် Loop ထဲကထွက်မည်
+          if (!data.error && data.candidates) {
+             reply = data.candidates[0].content.parts[0].text;
+             success = true;
+          } else {
+             console.log(`Model ${model} failed:`, data.error?.message);
+          }
+        } catch (err) {
+          console.log(`Connection failed for ${model}`);
+        }
       }
-
-      // အဖြေထုတ်ခြင်း
-      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "ပြန်ဖြေဖို့ အဆင်မပြေပါခင်ဗျာ။";
       
       return new Response(JSON.stringify({ reply }), { headers: { "Content-Type": "application/json" } });
+
     } catch (e) {
       return new Response(JSON.stringify({ reply: "အင်တာနက်လိုင်း အခက်အခဲရှိနေပါတယ်ခင်ဗျာ။" }), { headers: { "Content-Type": "application/json" } });
     }
