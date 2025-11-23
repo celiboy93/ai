@@ -5,27 +5,64 @@ const kv = await Deno.openKv();
 // API KEY
 const API_KEY = "AIzaSyClhO1S_DyCvZMzfDj2R28ivYx8vVhiZYc"; 
 
-// --- AI ညွှန်ကြားချက် (စုံပလုံစိ ရအောင် ပြင်ထားသည်) ---
+// --- AI ညွှန်ကြားချက် ---
 const SYSTEM_INSTRUCTION = `
-You are "Soe Kyaw Win AI", a helpful and smart assistant for Myanmar users.
+You are "Soe Kyaw Win AI", a smart assistant.
 
-**YOUR CAPABILITIES:**
-1. **General Knowledge:** Answer questions about Health, General Knowledge, History, etc.
-2. **Sports (Football):** Discuss football matches, teams, and news like a fan.
-3. **2D/3D Expert:** Use the provided 'Market Data' & 'Secret Formula' to predict numbers when asked.
+**YOUR PREDICTION LOGIC (Based on provided data):**
+1. **FORMULA 1 (5/10 Diff):**
+   - If data says "PREDICTION_FOR_EVENING", tell the user these numbers are for **Tonight**.
+   - If data says "PREDICTION_FOR_TOMORROW", tell the user these numbers are for **Tomorrow Morning**.
+2. **FORMULA 2 (Set/Value):**
+   - This is ONLY available after Morning result. It is ALWAYS for **Tonight**.
 
 **RULES:**
-- **Name:** Your name is "Soe Kyaw Win AI".
-- **Language:** Reply in **Correct Myanmar Spelling** (မြန်မာစာလုံးပေါင်း မှန်ကန်ပါစေ).
-- **Tone:** Friendly, Helpful, and Polite (but casual/friend mode if the user initiates it).
-- **2D Logic:** If asked about 2D evening numbers, look for "SECRET_EVENING_DIGITS" in the data I provide and recommend them.
+- Explain clearly which numbers are for Evening and which are for Tomorrow.
+- Use a friendly, casual tone ("ကွ", "ဟ", "ရောင်").
+- Correct Myanmar spelling.
 `;
 
-// Model များ
 const MODELS = ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.0-pro"];
 
-// --- တွက်ချက်မှု Function (Set/Value Formula) ---
-function calculateSecretFormula(setStr: string, valStr: string) {
+// --- တွက်နည်း (၁) - ၅ ပြည့် ၁၀ ပြည့် (Logic ပြင်ဆင်ထားသည်) ---
+function calculateFormula5_10(twod: string) {
+    try {
+        const digits = twod.split('').map(Number); // e.g., "13" -> [1, 3]
+        let incremented = [];
+        let originalSums = [];
+
+        for (let n of digits) {
+            // 5 ဖြစ်ဖို့လိုတာ (ဥပမာ: 1 ဆို 4 လိုတယ်, 3 ဆို 2 လိုတယ်)
+            let diff5 = (5 - (n % 5));
+            
+            // 10 ဖြစ်ဖို့လိုတာ (ဥပမာ: 1 ဆို 9 လိုတယ်, 3 ဆို 7 လိုတယ်)
+            let diff10 = (10 - (n % 10));
+            if (diff10 === 10) diff10 = 0; // 0 အတွက်
+
+            // ၁ တိုးမည်
+            let inc5 = (diff5 + 1) % 10;
+            let inc10 = (diff10 + 1) % 10;
+
+            originalSums.push(diff5);
+            originalSums.push(diff10);
+            incremented.push(inc5);
+            incremented.push(inc10);
+        }
+
+        // ၃ လုံးပြည့်အောင် စစ်ဆေးခြင်း
+        let finalSet = new Set(incremented);
+        if (finalSet.size < 3) {
+            for (let num of originalSums) {
+                finalSet.add(num);
+                if (finalSet.size >= 3) break; // ၃ လုံးပြည့်ရင် ရပ်မယ်
+            }
+        }
+        return Array.from(finalSet).join(", ");
+    } catch (e) { return null; }
+}
+
+// --- တွက်နည်း (၂) - Set/Value (Logic ပြင်ဆင်ထားပြီး) ---
+function calculateFormulaSetVal(setStr: string, valStr: string) {
     try {
         const s = setStr.replace(/,/g, ""); 
         const v = valStr.replace(/,/g, ""); 
@@ -45,7 +82,7 @@ function calculateSecretFormula(setStr: string, valStr: string) {
         if (finalSet.size < 3) {
             for (let num of originalSums) {
                 finalSet.add(num);
-                if (finalSet.size === 3) break;
+                if (finalSet.size >= 3) break;
             }
         }
         return Array.from(finalSet).join(", ");
@@ -62,21 +99,43 @@ async function getFullContext() {
         context += `[REAL-TIME DATA]\n`;
         context += `Date: ${data.live?.date || 'Unknown'}\n`;
 
-        if (data.result && data.result[1]) {
-            const morning = data.result[1];
-            context += `Morning Result: ${morning.twod}\n`;
-            if (morning.set && morning.value) {
-                const secretDigits = calculateSecretFormula(morning.set, morning.value);
-                if (secretDigits) context += `SECRET_EVENING_DIGITS: [${secretDigits}]\n`; 
-            }
-        } else {
-            context += `Morning Result: Not Released Yet\n`;
-        }
+        let morningNum = null;
+        let eveningNum = null;
 
+        if (data.result && data.result[1]) morningNum = data.result[1].twod;
         if (data.result && (data.result[3] || data.result[2])) {
             const ev = data.result[3] || data.result[2];
-            context += `Evening Result: ${ev.twod}\n`;
+            eveningNum = ev.twod;
         }
+
+        // --- LOGIC FLOW ---
+        
+        // ၁။ ညနေဂဏန်း ထွက်ပြီး (မနက်ဖြန်မနက်အတွက် တွက်မယ်)
+        if (eveningNum) {
+            context += `Status: Evening Result is OUT (${eveningNum}).\n`;
+            const f1 = calculateFormula5_10(eveningNum);
+            context += `PREDICTION_FOR_TOMORROW (Formula 1): [${f1}]\n`;
+            context += `Note: Formula 2 is not applicable for tomorrow yet.\n`;
+        } 
+        // ၂။ မနက်ဂဏန်း ထွက်ပြီး (ဒီညနေအတွက် တွက်မယ်)
+        else if (morningNum) {
+            context += `Status: Morning Result is OUT (${morningNum}). Waiting for Evening.\n`;
+            
+            // Formula 1 (Morning -> Evening)
+            const f1 = calculateFormula5_10(morningNum);
+            context += `PREDICTION_FOR_EVENING (Formula 1 - 5/10 Diff): [${f1}]\n`;
+
+            // Formula 2 (Set/Value -> Evening)
+            if (data.result[1].set && data.result[1].value) {
+                const f2 = calculateFormulaSetVal(data.result[1].set, data.result[1].value);
+                context += `PREDICTION_FOR_EVENING (Formula 2 - Set/Val): [${f2}]\n`;
+            }
+        } 
+        // ၃။ ဘာမှမထွက်သေး
+        else {
+            context += `Status: Market Not Open or No Results Yet.\n`;
+        }
+
     } catch (e) { context += "Live Data: Unavailable\n"; }
     return context;
 }
@@ -169,12 +228,9 @@ serve(async (req) => {
         const input = document.getElementById('msgInput');
         const typing = document.getElementById('typing');
         
-        // Load History (SKW_AI_CHAT)
-        let chatHistory = JSON.parse(localStorage.getItem('skw_ai_chat')) || [];
-        
-        // Initial Load
+        let chatHistory = JSON.parse(localStorage.getItem('skw_ai_chat_v4')) || [];
         if (chatHistory.length === 0) {
-            addBubble("မင်္ဂလာပါ ဘာကူညီရမလဲဗျ", 'ai', false);
+            addBubble("မင်္ဂလာပါ ဘာကူညီရမလဲဗျ။", 'ai', false);
         } else {
             chatHistory.forEach(c => addBubble(c.text, c.type, false));
         }
@@ -183,12 +239,12 @@ serve(async (req) => {
 
         function saveChat(text, type) {
             chatHistory.push({ text, type });
-            localStorage.setItem('skw_ai_chat', JSON.stringify(chatHistory));
+            localStorage.setItem('skw_ai_chat_v4', JSON.stringify(chatHistory));
         }
 
         function clearChat() {
             if(confirm('ပြောထားတာတွေ ဖျက်မှာလား?')) {
-                localStorage.removeItem('skw_ai_chat');
+                localStorage.removeItem('skw_ai_chat_v4');
                 chatHistory = [];
                 chatBox.innerHTML = '';
                 addBubble("မင်္ဂလာပါ ဘာကူညီရမလဲဗျ", 'ai', false);
