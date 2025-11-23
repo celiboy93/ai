@@ -18,14 +18,14 @@ serve(async (req) => {
     try {
       const { message } = await req.json();
       
-      // ပြင်ဆင်ထားသော နေရာ (gemini-1.5-flash ကို အသုံးပြုထားသည်)
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
+      // ပြင်ဆင်ချက်: v1beta အစား v1 ကိုသုံးပြီး gemini-pro ကိုခေါ်ပါမည်
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [
             { 
-              role: "user", // Role ထည့်ပေးလိုက်ပါသည်
+              role: "user",
               parts: [{ text: SYSTEM_INSTRUCTION + "\nUser said: " + message }] 
             }
           ]
@@ -34,7 +34,6 @@ serve(async (req) => {
 
       const data = await response.json();
       
-      // Error စစ်ဆေးခြင်း
       if (data.error) {
           console.log(data.error);
           return new Response(JSON.stringify({ reply: "Error: " + data.error.message }), { headers: { "Content-Type": "application/json" } });
