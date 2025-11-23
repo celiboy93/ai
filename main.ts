@@ -18,8 +18,8 @@ serve(async (req) => {
     try {
       const { message } = await req.json();
       
-      // ပြင်ဆင်ချက်: v1beta အစား v1 ကိုသုံးပြီး gemini-pro ကိုခေါ်ပါမည်
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`, {
+      // ၁၀၀% သေချာသော နောက်ဆုံးထွက် Version (gemini-1.5-flash)
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -35,11 +35,11 @@ serve(async (req) => {
       const data = await response.json();
       
       if (data.error) {
-          console.log(data.error);
+          console.log("API Error:", data.error);
           return new Response(JSON.stringify({ reply: "Error: " + data.error.message }), { headers: { "Content-Type": "application/json" } });
       }
 
-      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "စက်ပိုင်းဆိုင်ရာ အဆင်မပြေသေးပါခင်ဗျာ။";
+      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "ပြန်ဖြေဖို့ အဆင်မပြေပါခင်ဗျာ။";
       
       return new Response(JSON.stringify({ reply }), { headers: { "Content-Type": "application/json" } });
     } catch (e) {
