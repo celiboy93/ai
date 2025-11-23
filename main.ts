@@ -18,14 +18,14 @@ serve(async (req) => {
     try {
       const { message } = await req.json();
       
-      // ၁၀၀% သေချာသော နောက်ဆုံးထွက် Version (gemini-1.5-flash)
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
+      // ပြင်ဆင်ချက်: gemini-pro (v1beta) ကို ပြန်သုံးထားပါတယ်
+      // ဒါက အကောင့်တိုင်းအတွက် အဆင်အပြေဆုံး Model ပါ
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [
             { 
-              role: "user",
               parts: [{ text: SYSTEM_INSTRUCTION + "\nUser said: " + message }] 
             }
           ]
@@ -34,16 +34,19 @@ serve(async (req) => {
 
       const data = await response.json();
       
+      // Error စစ်ဆေးခြင်း
       if (data.error) {
           console.log("API Error:", data.error);
-          return new Response(JSON.stringify({ reply: "Error: " + data.error.message }), { headers: { "Content-Type": "application/json" } });
+          // Error တက်ရင် အကြောင်းရင်းကို ပြန်ပြပါမယ်
+          return new Response(JSON.stringify({ reply: "System Error: " + data.error.message }), { headers: { "Content-Type": "application/json" } });
       }
 
+      // အဖြေထုတ်ခြင်း
       const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "ပြန်ဖြေဖို့ အဆင်မပြေပါခင်ဗျာ။";
       
       return new Response(JSON.stringify({ reply }), { headers: { "Content-Type": "application/json" } });
     } catch (e) {
-      return new Response(JSON.stringify({ reply: "Connection Error." }), { headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ reply: "အင်တာနက်လိုင်း အခက်အခဲရှိနေပါတယ်ခင်ဗျာ။" }), { headers: { "Content-Type": "application/json" } });
     }
   }
 
